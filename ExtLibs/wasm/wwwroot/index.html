@@ -1,0 +1,93 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width">
+    <title>wasm</title>
+    <base href="/" />
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="css/site.css" rel="stylesheet" />
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+</head>
+<body>
+    <app>Loading...</app>
+
+<script src="_framework/blazor.webassembly.js"></script>
+   
+
+<script>
+    if (window["WebSocket"]) {
+        var host = "ws://" + window.location.hostname + ":56781/websocket/server";
+        if (window.location.hostname == "")
+            host = "ws://localhost:56781/websocket/server";
+        try {
+            socket = new WebSocket(host);
+
+            window.onbeforeunload = function () {
+                socket.close();
+            };
+            log('WebSocket - status '+socket.readyState);
+            socket.onopen = function (msg) {
+
+            };
+            socket.onmessage = function (msg) {
+
+            };
+        }
+        catch (exception) { if (window.console) console.log(exception);  } 
+    }
+</script>
+
+
+
+<script>
+    var map;
+    var markers = [];
+
+    function initMap() {
+        map = new google.maps.Map(document.getElementById('map'),
+            {
+                center: { lat: -35, lng: 117.89 },
+                zoom: 4,
+                mapTypeId: 'satellite',
+                maxZoom: 21
+            });
+
+        //map.setMapTypeId('satellite');
+
+        //map.setOptions({maxZoom: 21});
+
+        var marker = new google.maps.Marker({
+            //position: myLatLng,
+            map: map,
+            title: 'ArduPilot'
+        });
+
+        markers = [];
+        markers.push(marker);
+    }
+
+    function setPosition(lat,lng)
+    {
+        var myLatLng = { lat: lat, lng: lng };
+        markers[0].setPosition(myLatLng);
+        map.setCenter({ lat: lat, lng: lng });
+    }
+
+  
+
+
+  
+
+    //map.setCenter({lat: cs.lat, lng: cs.lng});
+
+    //&callback=initMap
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDW05vWXeNIfZAN4Ter8gf4YLg8rPHZToc" async defer></script>
+
+
+
+
+</body>
+</html>

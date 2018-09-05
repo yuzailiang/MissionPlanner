@@ -1,0 +1,213 @@
+﻿@page "/counter"
+@using System.IO
+@using System.Net
+@using System.Net.WebSockets
+@using System.Threading
+@using MissionPlanner
+@using MissionPlanner.Comms
+@using MissionPlanner.Utilities
+@using MissionPlanner.Log
+@using System.IO;
+
+@using System.Text;
+
+@using System.Security.Cryptography;
+@using Blazor.FileReader;
+@using System.IO;
+@inject IFileReaderService fileReaderService;
+@inject HttpClient Http
+
+<h1>Counter</h1>
+
+<p>Current count: @currentCount</p>
+
+<button class="btn btn-primary" onclick="@IncrementCount">Click me</button>
+
+<input type="file" ref="inputTypeFileElement" />
+<button onclick="@ReadFile">Read file</button>
+<br />
+
+<p>@lat @lng @alt @hdg</p>
+
+@SayHello()
+
+<div id="map" style="width: 100%; height: 70vh;"></div>
+
+@functions {
+    double lat=0, lng=0, alt=0;
+    private ushort hdg;
+    int currentCount = 0;
+
+    [JSInvokable]
+    public string SayHello() => $"Hello, {currentCount}!";
+
+
+    async void IncrementCount()
+    {
+        currentCount++;
+
+        Console.WriteLine(currentCount);
+
+        MAVLink.mavlink_heartbeat_t hb = new MAVLink.mavlink_heartbeat_t();
+
+        hb.autopilot = 1;
+        hb.type = 2;
+
+        var hbbytes = MavlinkUtil.StructureToByteArray(hb);
+
+        Console.WriteLine(hbbytes);
+
+        Console.WriteLine(MatLab.GetMatLabSerialDate(DateTime.Parse("2018-8-28 16:03:22")));
+        Console.WriteLine(MatLab.GetMatLabSerialDate(DateTime.MinValue));
+
+        /*
+            using (var ws = new ClientWebSocket())
+            {
+                Console.WriteLine(ws);
+
+                ws.Options.KeepAliveInterval = Timeout.InfiniteTimeSpan;
+                await ws.ConnectAsync(new Uri("wss://127.0.0.1:56781/websocket/raw"), CancellationToken.None);
+
+                await ws.SendAsync(new ArraySegment<byte>(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }), WebSocketMessageType.Binary, true, CancellationToken.None);
+
+            }
+            */
+        try
+        {
+            CollectionBuffer collectionBuffer = new CollectionBuffer(new MemoryStream());
+
+
+            MAVLinkInterface mav = new MAVLinkInterface();
+
+            Console.WriteLine(mav);
+
+            mav.BaseStream = new CommsSerialPipe();
+
+            mav.readPacket();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+    }
+
+    ElementRef inputTypeFileElement;
+
+    DateTime nextUpdate = DateTime.Now.AddMilliseconds(100);
+
+
+    public async Task ReadFile()
+    {
+        JSRuntime.Current.InvokeAsync<object>("initMap", null);
+
+        foreach (var file in await fileReaderService.CreateReference(inputTypeFileElement).EnumerateFilesAsync())
+        {
+            /*
+            // Read into buffer and act (uses less memory)
+            using (Stream stream = await file.OpenReadAsync())
+            {
+                // Do stuff with stream...
+                //await stream.ReadAsync(buffer, ...);
+                // This following will fail. Only async read is allowed.
+                //stream.Read(buffer, ...)
+
+            }
+            */
+            var info = await file.ReadFileInfoAsync();
+
+            Console.WriteLine(info.Name);
+
+            if (info.Name.ToLower().EndsWith("tlog"))
+            {
+
+
+                Console.WriteLine("about to read into memory");
+                using (MemoryStream memoryStream = await file.CreateMemoryStreamAsync(4096))
+                {
+                    Console.WriteLine("canread " + memoryStream.CanRead + " pos " + memoryStream.Position + "<" + memoryStream.Length);
+
+                    //var cf = new CommsFile();
+                    //cf.BaseStream = new BufferedStream(memoryStream, 1024 * 1024 * 5);
+
+                    MAVLinkInterface mav = new MAVLinkInterface(memoryStream);
+
+                    //mav.BaseStream = cf;
+
+                    long length = memoryStream.Length;
+                    while (memoryStream.Position < length)
+                    {
+                        //Console.WriteLine("open "+cf.IsOpen + " canread "+ cf.BaseStream.CanRead + " btr " + cf.BytesToRead + " pos " + cf.BaseStream.Position +"<"+ length);
+
+                        var packet = await mav.readPacketAsync();
+
+                        if (packet.data is MAVLink.mavlink_global_position_int_t)
+                        {
+                            var pos = (MAVLink.mavlink_global_position_int_t) packet.data;
+
+                            lat = pos.lat / 1e7;
+                            lng = pos.lon / 1e7;
+                            alt = pos.alt / 1e3;
+                            hdg = pos.hdg;
+
+                            if (DateTime.Now > nextUpdate)
+                            {
+                                // register state change
+                                StateHasChanged();
+
+                                JSRuntime.Current.InvokeAsync<object>("setPosition", new object[] {lat, lng});
+
+                                await Task.Delay(1);
+
+                                nextUpdate = DateTime.Now.AddMilliseconds(100);
+                            }
+
+                            //Console.WriteLine("Update mavlink_global_position_int_t ##############################");
+                        }
+                        else if (packet.data is MAVLink.mavlink_gps_raw_int_t)
+                        {
+                            var pos = (MAVLink.mavlink_gps_raw_int_t) packet.data;
+
+                            lat = pos.lat / 1e7;
+                            lng = pos.lon / 1e7;
+                            alt = pos.alt / 1e3;
+                            hdg = (ushort)(pos.cog / 1e2);
+
+                            //StateHasChanged();
+
+                            //await Task.Delay(1);
+
+                            //Console.WriteLine("Update mavlink_gps_raw_int_t ##############################");
+                        }
+                        else if (packet.data is MAVLink.mavlink_heartbeat_t)
+                        {
+                            var hb = (MAVLink.mavlink_heartbeat_t)packet.data;
+
+                            mav.DebugPacket(packet, true);
+                        }
+
+                        //mav.DebugPacket(packet, true);
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("about to read into memory");
+                // Read into memory and act
+                using (MemoryStream memoryStream = await file.CreateMemoryStreamAsync(4096))
+                {
+                    // Sync calls are ok once file is in memory
+                    //memoryStream.Read(buffer, ...)
+
+                    Console.WriteLine("CollectionBuffer init");
+                    CollectionBuffer collectionBuffer = new CollectionBuffer(memoryStream);
+
+                    Console.WriteLine("CollectionBuffer loop line");
+                    foreach (var line in collectionBuffer)
+                    {
+                        Console.Write(line);
+                    }
+                }
+            }
+        }
+    }
+    }
