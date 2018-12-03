@@ -1,13 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using ZedGraph;
-using GMap.NET;
 using System.Xml;
+using GMap.NET.MapProviders;
 using MissionPlanner.GCSViews;
 using MissionPlanner.Utilities; // GE xml alt reader
 
@@ -241,9 +238,9 @@ namespace MissionPlanner
             {
                 using (
                     XmlTextReader xmlreader =
-                        new XmlTextReader("http://maps.google.com/maps/api/elevation/xml?path=" + coords + "&samples=" +
+                        new XmlTextReader("https://maps.google.com/maps/api/elevation/xml?path=" + coords + "&samples=" +
                                           (distance/100).ToString(new System.Globalization.CultureInfo("en-US")) +
-                                          "&sensor=false"))
+                                          "&sensor=false&key="+GoogleMapProvider.APIKey))
                 {
                     while (xmlreader.Read())
                     {

@@ -8,24 +8,20 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using DirectShowLib;
 using GMap.NET;
-using GMap.NET.MapProviders;
 using GMap.NET.WindowsForms;
 using GMap.NET.WindowsForms.Markers;
 using log4net;
-using Microsoft.Scripting.Utils;
 using MissionPlanner.ArduPilot;
 using MissionPlanner.Controls;
 using MissionPlanner.Joystick;
 using MissionPlanner.Log;
 using MissionPlanner.Utilities;
 using MissionPlanner.Warnings;
-using OpenTK;
 using WebCamService;
 using ZedGraph;
 using LogAnalyzer = MissionPlanner.Utilities.LogAnalyzer;
@@ -414,28 +410,33 @@ namespace MissionPlanner.GCSViews
 
 
                 if (lbl1 == null)
+                {
                     lbl1 = new MyLabel();
-
-                lbl1.Location = new Point(x, y);
-                lbl1.Size = new Size(90, 13);
-                lbl1.Text = field;
-                lbl1.Name = field;
-                lbl1.Visible = true;
+                    lbl1.Location = new Point(x, y);
+                    lbl1.Size = new Size(90, 13);
+                    lbl1.Text = field;
+                    lbl1.Name = field;
+                    lbl1.Visible = true;
+                }
 
                 if (lbl2 == null)
+                {
                     lbl2 = new MyLabel();
 
-                lbl2.AutoSize = false;
+                    lbl2.AutoSize = false;
 
-                lbl2.Location = new Point(lbl1.Right + 5, y);
-                lbl2.Size = new Size(50, 13);
+                    lbl2.Location = new Point(lbl1.Right + 5, y);
+                    lbl2.Size = new Size(50, 13);
+
+                    lbl2.Name = field + "value";
+                    lbl2.Visible = true;
+                }
+
                 if (lbl2.DataBindings.Count == 0)
                 {
                     lbl2.DataBindings.Add(new Binding("Text", bindingSourceStatusTab, field, false,
                         DataSourceUpdateMode.Never, "0"));
                 }
-                lbl2.Name = field + "value";
-                lbl2.Visible = true;
                 //lbl2.Text = fieldValue.ToString();
 
                 if (!tabStatus.Controls.Contains(lbl1))
@@ -854,7 +855,7 @@ namespace MissionPlanner.GCSViews
 
                 try
                 {
-                    if (aviwriter != null && vidrec.AddMilliseconds(100) <= DateTime.Now)
+                    if (aviwriter != null && vidrec.AddMilliseconds(1000/25.0) <= DateTime.Now)
                     {
                         vidrec = DateTime.Now;
 
@@ -864,7 +865,7 @@ namespace MissionPlanner.GCSViews
                         // add a frame
                         aviwriter.avi_add(hud1.streamjpg.ToArray(), (uint) hud1.streamjpg.Length);
                         // write header - so even partial files will play
-                        aviwriter.avi_end(hud1.Width, hud1.Height, 10);
+                        aviwriter.avi_end(hud1.Width, hud1.Height, 25);
                     }
                 }
                 catch
@@ -2816,31 +2817,19 @@ namespace MissionPlanner.GCSViews
 
             foreach (var field in test.GetProperties())
             {
-                // field.Name has the field's name.
-                object fieldValue;
-                TypeCode typeCode;
-                try
-                {
-                    fieldValue = field.GetValue(thisBoxed, null); // Get value
+                var fieldValue = field.GetValue(thisBoxed, null); // Get value
 
-                    if (fieldValue == null)
-                        continue;
-
-                    // Get the TypeCode enumeration. Multiple types get mapped to a common typecode.
-                    typeCode = Type.GetTypeCode(fieldValue.GetType());
-                }
-                catch
-                {
+                if (fieldValue == null)
                     continue;
-                }
 
-                if (!(typeCode == TypeCode.Single || typeCode == TypeCode.Double || 
-                    typeCode == TypeCode.Int32 || typeCode == TypeCode.UInt16))
+
+                if (!fieldValue.IsNumber())
                     continue;
 
                 max_length = Math.Max(max_length, TextRenderer.MeasureText(field.Name, selectform.Font).Width);
                 fields.Add(field.Name);
             }
+
             max_length += 15;
             fields.Sort();          
 
@@ -2905,7 +2894,7 @@ namespace MissionPlanner.GCSViews
                 chk_box.Name = field;
                 chk_box.Tag = "custom";
                 chk_box.Location = new Point(x, y);
-                chk_box.Size = new Size(100, 20);
+                chk_box.Size = new Size(120, 20);
                 chk_box.CheckedChanged += chk_box_CheckedChanged;
 
                 selectform.Controls.Add(chk_box);
@@ -2915,10 +2904,10 @@ namespace MissionPlanner.GCSViews
 
                 if (y > selectform.Height - 50)
                 {
-                    x += 100;
+                    x += 120;
                     y = 10;
 
-                    selectform.Width = x + 100;
+                    selectform.Width = x + 120;
                 }
             }
 
@@ -2965,9 +2954,7 @@ namespace MissionPlanner.GCSViews
                 // Get the TypeCode enumeration. Multiple types get mapped to a common typecode.
                 TypeCode typeCode = Type.GetTypeCode(fieldValue.GetType());
 
-                if (
-                    !(typeCode == TypeCode.Single || typeCode == TypeCode.Double || typeCode == TypeCode.Int32 ||
-                      typeCode == TypeCode.UInt16))
+                if (!fieldValue.IsNumber())
                     continue;
 
                 max_length = Math.Max(max_length, TextRenderer.MeasureText(field.Name, selectform.Font).Width);
@@ -3347,15 +3334,12 @@ namespace MissionPlanner.GCSViews
 
             foreach (var field in test.GetProperties())
             {
-                TypeCode typeCode = Type.GetTypeCode(field.PropertyType);
-
-                if (!(typeCode == TypeCode.Single || typeCode == TypeCode.Double || typeCode == TypeCode.Int32 ||
-                      typeCode == TypeCode.UInt16))
-                    continue;
-                
                 // field.Name has the field's name.
                 object fieldValue = field.GetValue(thisBoxed, null); // Get value
                 if (fieldValue == null)
+                    continue;
+
+                if (!fieldValue.IsNumber())
                     continue;
 
                 max_length = Math.Max(max_length, TextRenderer.MeasureText(field.Name, selectform.Font).Width);
@@ -3985,7 +3969,15 @@ namespace MissionPlanner.GCSViews
                     {
                         newlogfile = Path.GetTempFileName() + ".log";
 
-                        BinaryLog.ConvertBin(ofd.FileName, newlogfile);
+                        try
+                        {
+                            BinaryLog.ConvertBin(ofd.FileName, newlogfile);
+                        }
+                        catch (IOException ex)
+                        {
+                            CustomMessageBox.Show("File access issue: " + ex.Message, Strings.ERROR);
+                            return;
+                        }
 
                         ofd.FileName = newlogfile;
                     }
@@ -4034,7 +4026,9 @@ namespace MissionPlanner.GCSViews
         {
             threadrun = false;
 
-            while (thisthread.IsAlive)
+            DateTime end = DateTime.Now.AddSeconds(5);
+
+            while (thisthread.IsAlive && DateTime.Now < end)
             {
                 Application.DoEvents();
             }
